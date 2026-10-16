@@ -1,0 +1,6 @@
+const {createClient}=require('@supabase/supabase-js');
+const TZ='Asia/Colombo';
+const json=(statusCode,body)=>({statusCode,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'},body:JSON.stringify(body)});
+function dayKey(){const p=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()),o={};for(const x of p)if(x.type!=='literal')o[x.type]=x.value;return `${o.year}-${o.month}-${o.day}`}
+function resetIso(){const [y,m,d]=dayKey().split('-').map(Number);return new Date(Date.UTC(y,m-1,d+1,18,30)).toISOString()}
+exports.handler=async()=>{const {SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY}=process.env;if(!SUPABASE_URL||!SUPABASE_SERVICE_ROLE_KEY)return json(503,{error:'Daily availability is not configured. Set Supabase environment variables in Netlify.'});try{const s=createClient(SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}}),day=dayKey(),{count,error}=await s.from('like_requests').select('id',{count:'exact',head:true}).eq('request_day',day).eq('status','success');if(error)throw error;const used=count||0;return json(200,{date:day,timezone:TZ,limit:15,used,remaining:Math.max(0,15-used),resetAt:resetIso()})}catch(e){console.error(e.message);return json(503,{error:'Could not read daily availability from the database.'})}};
